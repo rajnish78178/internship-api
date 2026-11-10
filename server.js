@@ -39,6 +39,14 @@ CREATE TABLE IF NOT EXISTS internships (
   type TEXT
 )
 `);
+// --- TASK 05: SEED SAMPLE INTERNSHIPS ---
+const count = db.prepare('SELECT COUNT(*) as c FROM internships').get();
+if (count.c === 0) {
+  const insert = db.prepare('INSERT INTO internships (title, company, location, stipend, type) VALUES (?, ?, ?, ?, ?)');
+  insert.run('Web Development Intern', 'Tech Spark', 'Remote', '10000/month', 'Remote');
+  insert.run('Python Intern', 'Code Labs', 'Delhi', '8000/month', 'Hybrid');
+  insert.run('UI/UX Design Intern', 'Design Hub', 'Noida', '12000/month', 'On-site');
+}
 
 // --- TASK 04: APPLICATIONS TABLE ---
 db.exec(`
