@@ -1,8 +1,14 @@
-# Internship API - Task 03
+# Internship Board - Production Ready Capstone
 
-Node.js + Express + SQLite API for EdVryo Internship Board.
+Live internship portal with secure application system.
 
-## Setup
+## Features
+- Responsive Internship Board
+- REST API with SQLite persistent data
+- Secure Application form with validation & rate limiting
+- Health check & request logging
+
+## How to Run
 ```bash
 npm install
-node server.js
+npm start

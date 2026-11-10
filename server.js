@@ -108,5 +108,18 @@ app.get('/api/applications', (req, res) => {
   const rows = db.prepare('SELECT * FROM applications ORDER BY id DESC').all();
   res.json({ status: "success", data: rows });
 });
+// Capstone - Logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
 
+// Capstone - Health Check
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    uptime: process.uptime(), 
+    timestamp: new Date().toISOString() 
+  });
+});
 app.listen(3000, () => console.log('Server running on http://localhost:3000'));
