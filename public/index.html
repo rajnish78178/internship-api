@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Internship Portal</title>
+<style>
+  body{font-family:Arial;max-width:800px;margin:20px auto;padding:0 15px;background:#f4f4f4}
+  .card{background:#fff;padding:15px;margin:10px 0;border-radius:8px;box-shadow:0 1px 4px #ccc}
+  input,select,textarea{width:100%;padding:10px;margin:6px 0;border:1px solid #ccc;border-radius:5px;box-sizing:border-box}
+  button{background:#007bff;color:#fff;border:none;padding:11px 20px;border-radius:5px;cursor:pointer}
+  button:disabled{background:#999}
+  #msg{padding:10px;border-radius:5px;margin:10px 0;display:none}
+  .error{color:red;font-size:13px}
+</style>
+</head>
+<body>
+<h1>Internship Portal</h1>
+
+<div id="msg"></div>
+<div id="loading">Loading internships...</div>
+<div id="list"></div>
+
+<h2>Apply for Internship</h2>
+<div class="card">
+  <form id="applyForm" novalidate>
+    <label>Full Name</label>
+    <input type="text" id="name" placeholder="Your name">
+    <div class="error" id="nameErr"></div>
+
+    <label>Email</label>
+    <input type="email" id="email" placeholder="you@example.com">
+    <div class="error" id="emailErr"></div>
+
+    <label>Select Internship</label>
+    <select id="internship_id"><option value="">-- Select --</option></select>
+    <div class="error" id="internErr"></div>
+
+    <label>Message (Optional)</label>
+    <textarea id="message" rows="3" placeholder="Why do you want this internship?"></textarea>
+
+    <button type="submit" id="submitBtn">Submit Application</button>
+  </form>
+</div>
+
+<script>
+const listEl = document.getElementById('list');
+const loadingEl = document.getElementById('loading');
+const msgEl = document.getElementById('msg');
+const selectEl = document.getElementById('internship_id');
+
+function showMsg(text, isError){
+  msgEl.style.display='block';
+  msgEl.style.background = isError ? '#f8d7da' : '#d4edda';
+  msgEl.textContent = text;
+  setTimeout(()=> msgEl.style.display='none', 4000);
+}
+
+// --- TASK 04: Loading / Failure State ---
+async function loadInternships(){
+  try{
+    loadingEl.textContent = 'Loading internships...';
+    const res = await fetch('/api/internships');
+    if(!res.ok) throw new Error('Failed to load');
+    const json = await res.json();
+    const data = json.data || json;
+    loadingEl.style.display='none';
+    if(data.length===0){
+      listEl.innerHTML = '<p>No internships found.</p>';
+      return;
+    }
+    listEl.innerHTML = data.map(i => `
+      <div class="card">
+        <h3>${i.title}</h3>
+        <p>${i.company} - ${i.location || ''} | ${i.stipend || ''} | ${i.type || ''}</p>
+      </div>`).join('');
+    selectEl.innerHTML = '<option value="">-- Select --</option>' + data.map(i => `<option value="${i.id}">${i.title} - ${i.company}</option>`).join('');
+  } catch(err){
+    loadingEl.textContent = 'Failed to load internships. Please try again.';
+    loadingEl.style.color='red';
+  }
+}
+
+// --- TASK 04: Form Validation + Submit ---
+document.getElementById('applyForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const internship_id = selectEl.value;
+  const message = document.getElementById('message').value.trim();
+
+  let valid = true;
+  document.getElementById('nameErr').textContent = '';
+  document.getElementById('emailErr').textContent = '';
+  document.getElementById('internErr').textContent = '';
+
+  if(name.length < 2){ document.getElementById('nameErr').textContent='Name must be at least 2 characters'; valid=false; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ document.getElementById('emailErr').textContent='Enter a valid email'; valid=false; }
+  if(!internship_id){ document.getElementById('internErr').textContent='Please select an internship'; valid=false; }
+  if(!valid) return;
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting...';
+
+  try{
+    const res = await fetch('/api/applications', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, email, internship_id: Number(internship_id), message})
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.message || 'Failed');
+    showMsg('Application submitted successfully! ID: ' + data.id, false);
+    e.target.reset();
+  } catch(err){
+    showMsg(err.message, true);
+  } finally{
+    btn.disabled=false; btn.textContent='Submit Application';
+  }
+});
+
+loadInternships();
+</script>
+</body>
+</html>

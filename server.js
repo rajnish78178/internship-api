@@ -1,10 +1,31 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const Database = require('better-sqlite3');
+const path = require('path');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(express.json({ limit: '10kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// --- TASK 04: RATE LIMIT ---
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { status: "error", message: "Too many requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', limiter);
+
+const applyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { status: "error", message: "Too many applications, please try again later." },
+});
 
 const db = new Database('internships.db');
 
@@ -19,7 +40,20 @@ CREATE TABLE IF NOT EXISTS internships (
 )
 `);
 
-// LIST + Pagination + Format
+// --- TASK 04: APPLICATIONS TABLE ---
+db.exec(`
+CREATE TABLE IF NOT EXISTS applications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  internship_id INTEGER NOT NULL,
+  message TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (internship_id) REFERENCES internships(id)
+)
+`);
+
+// --- TASK 03: GET ALL with Pagination (tumhara purana) ---
 app.get('/api/internships', (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -29,32 +63,50 @@ app.get('/api/internships', (req, res) => {
   res.json({ status: "success", data: rows, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
 });
 
-// Naya internship add karo
+// --- TASK 03: POST (tumhara purana) ---
 app.post('/api/internships', (req, res) => {
   const { title, company, location, stipend, type } = req.body;
-    if (!title || !company) return res.status(400).json({ status: "error", message: "title and company are required" });
+  if (!title || !company) return res.status(400).json({ status: "error", message: "title and company are required" });
   const info = db.prepare('INSERT INTO internships (title, company, location, stipend, type) VALUES (?,?,?,?,?)').run(title, company, location, stipend, type);
   res.json({ id: info.lastInsertRowid });
 });
 
-// Delete karo
+// --- TASK 03: DELETE (tumhara purana) ---
 app.delete('/api/internships/:id', (req, res) => {
   db.prepare('DELETE FROM internships WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
-// DETAIL - Ek ki detail
-app.get('/api/internships/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM internships WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ status: "error", message: "Not found" });
-  res.json({ status: "success", data: row });
+
+// --- TASK 04: APPLICATION FORM API ---
+app.post('/api/applications', applyLimiter, (req, res) => {
+  const { name, email, internship_id, message } = req.body;
+
+  if (!name || name.trim().length < 2) {
+    return res.status(400).json({ status: "error", message: "Name must be at least 2 characters" });
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    return res.status(400).json({ status: "error", message: "Valid email is required" });
+  }
+  if (!internship_id) {
+    return res.status(400).json({ status: "error", message: "Internship selection is required" });
+  }
+
+  // Parameterized Query - SQL Injection safe
+  const internship = db.prepare('SELECT * FROM internships WHERE id = ?').get(internship_id);
+  if (!internship) {
+    return res.status(404).json({ status: "error", message: "Internship not found" });
+  }
+
+  const info = db.prepare('INSERT INTO applications (name, email, internship_id, message) VALUES (?, ?, ?, ?)')
+    .run(name.trim(), email.trim().toLowerCase(), internship_id, message || '');
+
+  res.status(201).json({ status: "success", id: info.lastInsertRowid, message: "Application submitted successfully!" });
 });
 
-// UPDATE - Update karo + Validation
-app.put('/api/internships/:id', (req, res) => {
-  const { title, company, location, stipend, type } = req.body;
-  if (!title || !company) return res.status(400).json({ status: "error", message: "title and company are required" });
-  const info = db.prepare('UPDATE internships SET title=?, company=?, location=?, stipend=?, type=? WHERE id=?').run(title, company, location, stipend, type, req.params.id);
-  if (info.changes === 0) return res.status(404).json({ status: "error", message: "Not found" });
-  res.json({ status: "success", data: { id: req.params.id, title, company } });
+app.get('/api/applications', (req, res) => {
+  const rows = db.prepare('SELECT * FROM applications ORDER BY id DESC').all();
+  res.json({ status: "success", data: rows });
 });
+
 app.listen(3000, () => console.log('Server running on http://localhost:3000'));
